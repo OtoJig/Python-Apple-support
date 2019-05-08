@@ -27,7 +27,7 @@ PROJECT_DIR=$(shell pwd)
 
 BUILD_NUMBER=1
 
-MACOSX_DEPLOYMENT_TARGET=10.8
+MACOSX_DEPLOYMENT_TARGET=10.14
 
 # Version of packages that will be compiled by this meta-package
 PYTHON_VERSION=3.7.0
@@ -50,7 +50,7 @@ CFLAGS-macOS=-mmacosx-version-min=$(MACOSX_DEPLOYMENT_TARGET)
 
 # iOS targets
 TARGETS-iOS=iphonesimulator.x86_64 iphoneos.arm64
-CFLAGS-iOS=-mios-version-min=7.0
+CFLAGS-iOS=-mios-version-min=11.0
 CFLAGS-iphoneos.arm64=-fembed-bitcode
 
 # tvOS targets
@@ -180,9 +180,9 @@ SDK-$1=$$(basename $1)
 SDK_ROOT-$1=$$(shell xcrun --sdk $$(SDK-$1) --show-sdk-path)
 CC-$1=xcrun --sdk $$(SDK-$1) clang \
 	-arch $$(ARCH-$1) \
-	--sysroot=$$(SDK_ROOT-$1) \
+	--sysroot $$(SDK_ROOT-$1) \
 	$$(CFLAGS-$2) $$(CFLAGS-$1)
-LDFLAGS-$1=-arch $$(ARCH-$1) -isysroot=$$(SDK_ROOT-$1)
+LDFLAGS-$1=-arch $$(ARCH-$1) -isysroot $$(SDK_ROOT-$1)
 
 OPENSSL_DIR-$1=build/$2/openssl-$(OPENSSL_VERSION)-$1
 BZIP2_DIR-$1=build/$2/bzip2-$(BZIP2_VERSION)-$1
