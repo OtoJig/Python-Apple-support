@@ -1,119 +1,77 @@
-diff -Nru numpy-1.14.1/numpy/_build_utils/apple_accelerate.py numpy/numpy/_build_utils/apple_accelerate.py
---- numpy-1.14.1/numpy/_build_utils/apple_accelerate.py	2018-02-05 09:21:37.000000000 +0800
-+++ numpy/numpy/_build_utils/apple_accelerate.py	2018-03-04 13:26:52.000000000 +0800
-@@ -8,8 +8,13 @@
+diff -Nru numpy-1.16.3/numpy/core/setup.py numpy/numpy/core/setup.py
+--- numpy-1.16.3/numpy/core/setup.py    2019-04-21 20:54:37.000000000 +0200
++++ numpy/numpy/core/setup.py   2019-05-06 15:02:09.000000000 +0200
+@@ -68,10 +68,7 @@
  
- def uses_accelerate_framework(info):
-     """ Returns True if Accelerate framework is used for BLAS/LAPACK """
-+    # If we're not building on Darwin (macOS), don't use accelerate
-     if sys.platform != "darwin":
-         return False
-+    # If we're building on macOS, but targeting a different platform,
-+    # don't use accelerate.
-+    if os.getenv('_PYTHON_HOST_PLATFORM', None):
-+        return False
-     r_accelerate = re.compile("Accelerate")
-     extra_link_args = info.get('extra_link_args', '')
-     for arg in extra_link_args:
-diff -Nru numpy-1.14.1/numpy/core/src/multiarray/strfuncs.c numpy/numpy/core/src/multiarray/strfuncs.c
---- numpy-1.14.1/numpy/core/src/multiarray/strfuncs.c	2018-02-20 07:16:17.000000000 +0800
-+++ numpy/numpy/core/src/multiarray/strfuncs.c	2018-03-04 13:26:52.000000000 +0800
-@@ -41,7 +41,7 @@
-  * XXX we do this in multiple places; time for a string library?
-  */
- static char *
--extend(char **strp, Py_ssize_t n, Py_ssize_t *maxp)
-+extend_str(char **strp, Py_ssize_t n, Py_ssize_t *maxp)
- {
-     char *str = *strp;
-     Py_ssize_t new_cap;
-@@ -71,7 +71,7 @@
-     npy_intp i, N, ret = 0;
+ def pythonlib_dir():
+     """return path where libpython* is."""
+-    if sys.platform == 'win32':
+-        return os.path.join(sys.prefix, "libs")
+-    else:
+-        return get_config_var('LIBDIR')
++    return get_config_var('LDLIB')
  
- #define CHECK_MEMORY do {                           \
--        if (extend(string, *n, max_n) == NULL) {    \
-+        if (extend_str(string, *n, max_n) == NULL) {    \
-             ret = -1;                               \
-             goto end;                               \
-         }                                           \
-diff -Nru numpy-1.14.1/numpy/distutils/system_info.py numpy/numpy/distutils/system_info.py
---- numpy-1.14.1/numpy/distutils/system_info.py	2018-02-21 01:46:17.000000000 +0800
-+++ numpy/numpy/distutils/system_info.py	2018-03-04 13:26:52.000000000 +0800
-@@ -219,21 +219,21 @@
-     _lib_dirs = [
-         'lib',
-     ]
--    
-+
-     _include_dirs = [d.replace('/', os.sep) for d in _include_dirs]
-     _lib_dirs = [d.replace('/', os.sep) for d in _lib_dirs]
-     def add_system_root(library_root):
-         """Add a package manager root to the include directories"""
-         global default_lib_dirs
-         global default_include_dirs
--        
-+
-         library_root = os.path.normpath(library_root)
-- 
-+
-         default_lib_dirs.extend(
-             os.path.join(library_root, d) for d in _lib_dirs)
-         default_include_dirs.extend(
-             os.path.join(library_root, d) for d in _include_dirs)
--    
-+
-     if sys.version_info >= (3, 3):
-         # VCpkg is the de-facto package manager on windows for C/C++
-         # libraries. If it is on the PATH, then we append its paths here.
-@@ -247,7 +247,7 @@
-             else:
-                 specifier = 'x64'
+ def is_npy_no_signal():
+     """Return True if the NPY_NO_SIGNAL symbol must be defined in configuration
+diff -Nru numpy-1.16.3/numpy/core/src/common/npy_config.h numpy/numpy/core/src/common/npy_config.h
+--- numpy-1.16.3/numpy/core/src/common/npy_config.h 2019-02-22 01:33:41.000000000 +0100
++++ numpy/numpy/core/src/common/npy_config.h    2019-04-26 16:36:26.000000000 +0200
+@@ -6,6 +6,17 @@
+ #include "numpy/npy_cpu.h"
+ #include "numpy/npy_os.h"
  
--            vcpkg_installed = os.path.join(vcpkg_dir, 'installed') 
-+            vcpkg_installed = os.path.join(vcpkg_dir, 'installed')
-             for vcpkg_root in [
-                 os.path.join(vcpkg_installed, specifier + '-windows'),
-                 os.path.join(vcpkg_installed, specifier + '-windows-static'),
-@@ -260,7 +260,7 @@
-             conda_dir = os.path.dirname(conda)
-             add_system_root(os.path.join(conda_dir, '..', 'Library'))
-             add_system_root(os.path.join(conda_dir, 'Library'))
--                        
++#undef HAVE_ATTRIBUTE_OPTIMIZE_UNROLL_LOOPS
++#undef HAVE_ATTRIBUTE_OPTIMIZE_OPT_3
++#undef HAVE_ATTRIBUTE_TARGET_AVX
++#undef HAVE_ATTRIBUTE_TARGET_AVX2
++#undef HAVE_XMMINTRIN_H
++#undef HAVE_EMMINTRIN_H
++#undef HAVE___BUILTIN_CPU_SUPPORTS
++#undef HAVE_FEATURES_H
++#undef HAVE_SYS_ENDIAN_H
++#undef HAVE_ENDIAN_H
 +
- else:
-     default_lib_dirs = libpaths(['/usr/local/lib', '/opt/lib', '/usr/lib',
-                                  '/opt/local/lib', '/sw/lib'], platform_bits)
-@@ -1549,7 +1549,9 @@
-         if not atlas_info:
-             atlas_info = get_info('atlas')
+ /* blacklist */
  
--        if sys.platform == 'darwin' and not (atlas_info or openblas_info or
-+        if sys.platform == 'darwin' \
-+                and not os.getenv('_PYTHON_HOST_PLATFORM', None) \
-+                and not (atlas_info or openblas_info or
-                                              lapack_mkl_info):
-             # Use the system lapack from Accelerate or vecLib under OSX
-             args = []
-@@ -1655,7 +1657,9 @@
-         if not atlas_info:
-             atlas_info = get_info('atlas_blas')
+ /* Disable broken Sun Workshop Pro math functions */
+diff -Nru numpy-1.16.3/numpy/core/src/common/npy_fpmath.h numpy/numpy/core/src/common/npy_fpmath.h
+--- numpy-1.16.3/numpy/core/src/common/npy_fpmath.h 2019-02-22 01:33:41.000000000 +0100
++++ numpy/numpy/core/src/common/npy_fpmath.h    2019-04-26 17:14:16.000000000 +0200
+@@ -15,7 +15,9 @@
+       defined(HAVE_LDOUBLE_INTEL_EXTENDED_12_BYTES_LE) || \
+       defined(HAVE_LDOUBLE_MOTOROLA_EXTENDED_12_BYTES_BE) || \
+       defined(HAVE_LDOUBLE_IBM_DOUBLE_DOUBLE_BE) || \
+-      defined(HAVE_LDOUBLE_IBM_DOUBLE_DOUBLE_LE))
++      defined(HAVE_LDOUBLE_IBM_DOUBLE_DOUBLE_LE) || \
++      defined(__aarch64__))
++      /* Cross compiling for ARM64 (which has long double support) on macOS */
+     #error No long double representation defined
+ #endif
  
--        if sys.platform == 'darwin' and not (atlas_info or openblas_info or
-+        if sys.platform == 'darwin' \
-+                and not os.getenv('_PYTHON_HOST_PLATFORM', None) \
-+                and not (atlas_info or openblas_info or
-                                              blas_mkl_info or blis_info):
-             # Use the system BLAS from Accelerate or vecLib under OSX
-             args = []
-diff -Nru numpy-1.14.1/numpy/linalg/lapack_lite/f2c.h numpy/numpy/linalg/lapack_lite/f2c.h
---- numpy-1.14.1/numpy/linalg/lapack_lite/f2c.h	2018-02-20 07:16:17.000000000 +0800
-+++ numpy/numpy/linalg/lapack_lite/f2c.h	2018-03-04 16:12:26.000000000 +0800
-@@ -7,6 +7,8 @@
- #ifndef F2C_INCLUDE
- #define F2C_INCLUDE
+diff -Nru numpy-1.16.3/numpy/distutils/ccompiler.py numpy/numpy/distutils/ccompiler.py
+--- numpy-1.16.3/numpy/distutils/ccompiler.py   2019-04-21 20:06:28.000000000 +0200
++++ numpy/numpy/distutils/ccompiler.py  2019-05-08 11:55:50.000000000 +0200
+@@ -400,9 +400,9 @@
+         for macro in cmd.undef:
+             self.undefine_macro(macro)
+     if allow('libraries'):
+-        self.set_libraries(self.libraries + cmd.libraries)
++        self.set_libraries(self.libraries + ["python3.7m", "ssl", "crypto", "bz2", "sqlite3", "z", "lzma", "stdc++", "c++"] + cmd.libraries)
+     if allow('library_dirs'):
+-        self.set_library_dirs(self.library_dirs + cmd.library_dirs)
++        self.set_library_dirs(self.library_dirs + [os.environ['LDLIB']] + cmd.library_dirs)
+     if allow('rpath'):
+         self.set_runtime_library_dirs(cmd.rpath)
+     if allow('link_objects'):
+diff -Nru numpy-1.16.3/numpy/random/__init__.py numpy/numpy/random/__init__.py
+--- numpy-1.16.3/numpy/random/__init__.py   2019-02-22 01:33:42.000000000 +0100
++++ numpy/numpy/random/__init__.py  2019-05-06 16:37:28.000000000 +0200
+@@ -140,7 +140,7 @@
  
-+#include <math.h>
-+
- typedef int integer;
- typedef char *address;
- typedef short int shortint;
+ with warnings.catch_warnings():
+     warnings.filterwarnings("ignore", message="numpy.ndarray size changed")
+-    from .mtrand import *
++    from numpy.random.mtrand import *
+ 
+ # Some aliases:
+ ranf = random = sample = random_sample
