@@ -2,7 +2,7 @@
 # NumPy
 ###########################################################################
 
-NUMPY_VERSION=1.14.1
+NUMPY_VERSION=1.16.3
 NUMPY_CONFIG=BLAS=None LAPACK=None ATLAS=None
 
 # Download original numpy source code archive.
@@ -11,19 +11,30 @@ downloads/numpy-$(NUMPY_VERSION).tgz:
 	if [ ! -e downloads/numpy-$(NUMPY_VERSION).tgz ]; then curl --fail -L https://github.com/numpy/numpy/releases/download/v$(NUMPY_VERSION)/numpy-$(NUMPY_VERSION).tar.gz -o downloads/numpy-$(NUMPY_VERSION).tgz; fi
 
 define build-numpy-target
-NUMPY-CFLAGS-$1=$$(CFLAGS-$2)
+NUMPY-CFLAGS-$1=$$(CFLAGS-$1)
 NUMPY-CC-$1=xcrun --sdk $$(SDK-$1) clang \
 	-arch $$(ARCH-$1) \
-	--sysroot=$$(SDK_ROOT-$1) \
-	$$(NUMPY_CFLAGS-$1)
+	--sysroot $$(SDK_ROOT-$1)
+NUMPY-LDSHARED-iphonesimulator.x86_64=xcrun --sdk 'iphonesimulator' clang \
+	-arch x86_64 -Wall \
+	--sysroot $$(SDK_ROOT-$1) -v -r -fembed-bitcode
+NUMPY-LDLIB-iphonesimulator.x86_64=$(abspath build/iOS/)
+NUMPY-LDSHARED-iphoneos.arm64=xcrun --sdk 'iphoneos' clang \
+	-arch arm64 -Wall \
+	--sysroot $$(SDK_ROOT-$1) -v -r -fembed-bitcode
+NUMPY-LDLIB-iphoneos.arm64=$(abspath build/iOS/)
+
 
 build/$2/packages/numpy/build/temp.$1-$(PYTHON_VER)/libpymath.a: build/$2/packages/numpy
 	cd build/$2/packages/numpy && \
 		CC="$$(NUMPY-CC-$1)" \
 		CFLAGS="$$(NUMPY-CFLAGS-$1)" \
+		BASECFLAGS="" \
+		LDSHARED="$$(NUMPY-LDSHARED-$1)" \
+		LDLIB="$$(NUMPY-LDLIB-$1)" \
 		$(NUMPY_CONFIG) \
 		_PYTHON_HOST_PLATFORM=$1 \
-		$(HOST_PYTHON) setup.py build_ext
+		$(HOST_PYTHON) setup.py --verbose --no-user-cfg  build_ext
 
 build/$2/packages/numpy/build/temp.$1-$(PYTHON_VER)/libnumpy.a: build/$2/packages/numpy/build/temp.$1-$(PYTHON_VER)/libpymath.a
 	cd build/$2/packages/numpy/build/temp.$1-$(PYTHON_VER) && \
@@ -66,7 +77,20 @@ dist/$1/libnumpy.a: $(foreach target,$(TARGETS-$1),numpy-$(target))
 	xcrun lipo -create -output dist/$1/libnpysort.a $(foreach target,$(TARGETS-$1),build/$1/packages/numpy/build/temp.$(target)-$(PYTHON_VER)/libnpysort.a)
 	xcrun lipo -create -output dist/$1/libnumpy.a $(foreach target,$(TARGETS-$1),build/$1/packages/numpy/build/temp.$(target)-$(PYTHON_VER)/libnumpy.a)
 
-numpy-$1: dist/$1/libnumpy.a
+dist/$1/app_packages/numpy/: downloads/numpy-$(NUMPY_VERSION).tgz
+	mkdir -p dist/$1/app_packages/
+	cp -r build/$1/packages/numpy/numpy dist/$1/app_packages/
+	find build/$1/packages/numpy//build/ -name '__config__.py' -exec cp {} dist/$1/app_packages/numpy  \;
+	
+	# Remove unneeded files
+	# Remove module mtrand, it's provided by fat lib
+	rm -rf dist/$1/app_packages/numpy/random/mtrand
+	find dist/$1/app_packages/numpy/ -name tests -delete
+	find dist/$1/app_packages/numpy/ -name __pycache__ -delete
+	find dist/$1/app_packages/numpy/ -name *.pyc -delete
+	
+
+numpy-$1: dist/$1/libnumpy.a dist/$1/app_packages/numpy/
 
 endif
 endef
